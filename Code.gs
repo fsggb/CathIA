@@ -283,7 +283,7 @@ function autorisation() { UrlFetchApp.fetch('https://oauth2.googleapis.com/'); M
 /* ============ Modèles de la communauté : stockés dans le dépôt GitHub public (un dossier par utilisateur), notés sur 5 ============
  * Propriété du script à renseigner : GITHUB_TOKEN (jeton « fine-grained » limité au dépôt, droit Contents : lecture/écriture).
  * Sans ce jeton, la publication retombe sur l'ancien dossier Drive. */
-var GH_REPO = 'JavaBatchCSS/cathia', GH_BRANCH = 'main', PAGES_URL = 'https://javabatchcss.github.io/cathia/';
+var GH_REPO = 'fsggb/CathIA', GH_BRANCH = 'main', PAGES_URL = 'https://fsggb.github.io/CathIA/';
 var RAW_ = 'https://raw.githubusercontent.com/' + GH_REPO + '/' + GH_BRANCH + '/';
 function ghTok_() { return props_().getProperty('GITHUB_TOKEN') || ''; }
 function gh_(method, path, body) {

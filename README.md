@@ -6,7 +6,7 @@ Application web de conception 3D pour le froissartage (construction scoute en bo
 
 | | Adresse | Particularités |
 |---|---|---|
-| **Version GitHub Pages** (recommandée) | `https://javabatchcss.github.io/cathia/` | chargement rapide, aucune dépendance au compte Google du navigateur |
+| **Version GitHub Pages** (recommandée) | `https://fsggb.github.io/CathIA/` | chargement rapide, aucune dépendance au compte Google du navigateur |
 | Version Google Apps Script | adresse `/exec` du déploiement | conservée en parallèle |
 
 Les deux versions utilisent le même fichier `index.html` et le même serveur Apps Script (`Code.gs`) pour les bibliothèques et la publication. Les projets de chaque utilisateur sont enregistrés **dans son propre Google Drive** (accès limité aux fichiers créés par CathIA).
