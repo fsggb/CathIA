@@ -37,10 +37,11 @@ function authDlg(then,why){const err=t=>{const e=$('#au_e');if(e){e.textContent=
  s1()}
 async function googleLogin(then){try{const r=await gcall('googleStart',AUTH.email||''),w=window.open(r.url,'cathia_google','width=500,height=680');
   if(!w)throw new Error('La fenêtre Google a été bloquée : autorisez les fenêtres pop-up pour ce site, puis réessayez.');
-  modal(`<h3>Connexion Google en cours…</h3><p class="mu">Terminez la connexion dans la fenêtre Google qui vient de s’ouvrir. Cette fenêtre se fermera toute seule.</p><div class="r"><button id="gw_x">Annuler</button></div>`);let stop=false,gone=0;$('#gw_x').onclick=()=>{stop=true;closeMd()};const t0=Date.now();
+  modal(`<h3>Connexion Google en cours…</h3><p class="mu">Terminez la connexion dans la fenêtre Google qui vient de s’ouvrir. Cette fenêtre se fermera toute seule.</p><div class="r"><button id="gw_x">Annuler</button></div>`);let stop=false;$('#gw_x').onclick=()=>{stop=true;closeMd()};const t0=Date.now();
   while(!stop&&Date.now()-t0<300000){await sleep(1500);let c=null;try{c=await gcall('googleClaim',r.state)}catch(x){}
    if(c){if(c.err)throw new Error(c.err);authSet(c.token,c.email,c.at,c.exp);try{w.close()}catch(_){}closeMd();msg('Connecté avec Google : '+c.email);if(then)then();return}
-   try{gone=w.closed?gone+1:0}catch(_){}if(gone>=4){stop=true;closeMd();msg('Connexion Google annulée.')}}
+   /* Pas de test « w.closed » : les pages Google imposent une isolation (Cross-Origin-Opener-Policy) qui le fait renvoyer vrai
+      alors que la fenêtre est ouverte, ce qui annulait la connexion au bout de quelques secondes. « Annuler » reste disponible. */}
   if(!stop)throw new Error('Délai dépassé : recommencez.')}catch(x){closeMd();msg(x.message,9000)}}
 function authOut(){const t=AUTH.tok;authSet(null,AUTH.email);if(t)gcall('authLogout',t).catch(()=>{});msg('Déconnecté.')}
 const needAuth=then=>AUTH.tok?then():authDlg(then);

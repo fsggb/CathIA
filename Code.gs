@@ -15,7 +15,7 @@ var GSCOPE = 'openid email https://www.googleapis.com/auth/drive.file';
 
 function doGet(e) {
   var p = (e && e.parameter) || {};
-  if (p.code && p.state) return googleReturn_(p);
+  if (p.state && (p.code || p.error)) return googleReturn_(p);
   return HtmlService.createHtmlOutputFromFile('index')
     .setTitle('CathIA')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
@@ -126,6 +126,10 @@ function googleReturn_(p) {
   var cache = CacheService.getScriptCache(), k = 'gc_' + p.state, ok = false, msg = 'Connexion Google refusée.', done = cache.get(k);
   if (done) { var d = JSON.parse(done); return googlePage_(!d.err, d.err || ''); }   // deuxième chargement de la même page : on garde le premier résultat
   try {
+    // Google renvoie ?error=… (sans code) si la personne refuse ou si l'application n'est pas autorisée pour ce compte.
+    if (p.error) throw new Error(p.error === 'access_denied'
+      ? 'Google a refusé l’accès (access_denied). Si l’application est en mode « Test », ajoutez ce compte aux utilisateurs de test dans la console Google Cloud.'
+      : 'Google a renvoyé une erreur : ' + String(p.error).replace(/[^\w .:-]/g, '').slice(0, 80) + '.');
     if (!cache.get('gn_' + p.state)) throw new Error('Demande expirée : recommencez.');
     cache.remove('gn_' + p.state);
     var pr = props_(), cid = pr.getProperty('GOOGLE_CLIENT_ID');
@@ -145,7 +149,7 @@ function googleReturn_(p) {
 function googlePage_(ok, msg) {
   var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:16px system-ui,sans-serif;text-align:center;padding:48px 20px;color:#222}</style></head><body><h2>' +
     (ok ? 'Connexion réussie' : 'Connexion impossible') + '</h2><p>' + (ok ? 'Vous pouvez fermer cette fenêtre et retourner dans CathIA.' : String(msg).replace(/[<>&]/g, '')) +
-    '</p><script>setTimeout(function(){try{window.top.close()}catch(e){}},1200)<\/script></body></html>';
+    '</p>' + (ok ? '<script>setTimeout(function(){try{window.top.close()}catch(e){}},1200)<\/script>' : '<p><button onclick="window.close()">Fermer cette fenêtre</button></p>') + '</body></html>';
   return HtmlService.createHtmlOutput(html).setTitle('CathIA');
 }
 /* l'application interroge régulièrement jusqu'à ce que la connexion soit terminée */
