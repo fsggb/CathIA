@@ -144,7 +144,7 @@ function mkObj(type,p,g,name,color,pos,rot,par){const o={id:nid++,type,p:p||{...
  o.name=name||SPEC[type].n+' '+o.id;if(!GL.includes(type))o.g=g||build(o);objs.push(o);mk(o);touch();return o}
 function addObj(type,p,g,name,color,pos,rot,par){const o=mkObj(type,p,g,name,color,pos,rot,par);select([o]);return o}
 const WC=['#c8a06a','#bd935a','#d2ab76','#b5894f'];
-function rmObjs(list){list=new Set(list);list.forEach(o=>{sc.remove(o.m);o.m.geometry.dispose()});objs=objs.filter(o=>!list.has(o));sel=sel.filter(o=>!list.has(o));touch()}
+function rmObjs(list){list=new Set(list);  /* un brêlage supprimé ne lie plus ses pièces */  const J=new Set([...list].filter(o=>o.type=='lash'&&o.p&&o.p.jid).map(o=>o.p.jid));if(J.size)objs.forEach(x=>{if(x.lk)x.lk=x.lk.filter(j=>!J.has(j))});  list.forEach(o=>{sc.remove(o.m);o.m.geometry.dispose()});objs=objs.filter(o=>!list.has(o));sel=sel.filter(o=>!list.has(o));touch()}
 const bounds=(L=solids())=>{const b=new THREE.Box3();L.forEach(o=>{o.m.updateMatrixWorld(true);b.expandByObject(o.m)});return L.length?[b.min.toArray(),b.max.toArray()]:[[0,0,0],[1,1,1]]};
 /* ---------- Arborescence : assemblages et sous-assemblages ---------- */
 const kidsP=a=>objs.filter(o=>o.par==a),kidsA=a=>Object.values(asms).filter(x=>x.par==a);
@@ -192,15 +192,16 @@ function setMat(o,M){M.decompose(_p,_q,_s);o.pos=_p.toArray();const E=new THREE.
 R.domElement.addEventListener('pointerdown',e=>{if(e.button!==0||pickMode)return;const h=gzHit(e);if(!h)return;e.stopImmediatePropagation();rc.setFromCamera(ndc(e),cam);
  if(h.h=='s'){const o=sel[0],ax=axisOf(o);if(h.end==0&&o.ops&&o.ops.length){msg('Cette extrémité porte déjà des opérations : étirez l’autre bout, ou supprimez-les d’abord.',5000);return}const E=h.end?ax.p1:ax.p0;gzS={h:'s',end:h.end,o,u:ax.u,E:[...E],L0:o.p.L,pos0:[...o.pos],pid:e.pointerId,v0:axisParam(rc.ray,E,ax.u),d:0};R.domElement.setPointerCapture(e.pointerId);return}
  const ev=AXV[h.i];
- gzS={h:h.h,i:h.i,ev,c:[...gzC],init:moveTargets().map(o=>[o,matOf(o)]),pid:e.pointerId,v0:h.h=='t'?axisParam(rc.ray,gzC,ev):planeAngle(rc.ray,gzC,ev)};R.domElement.setPointerCapture(e.pointerId);if(gzS.v0==null)gzS=null},true);
+ const T1=targets(),pied=h.h!='t'&&T1.length==1&&selA==null&&T1[0].type=='trav'?(()=>{const a=axisOf(T1[0]);return a.p0[2]<=a.p1[2]?a.p0:a.p1})():null,cR=pied?[...pied]:[...gzC];  gzS={h:h.h,i:h.i,ev,c:cR,pied:!!pied,o1:pied?T1[0]:null,init:moveTargets().map(o=>[o,matOf(o)]),pid:e.pointerId,v0:h.h=='t'?axisParam(rc.ray,cR,ev):planeAngle(rc.ray,cR,ev)};R.domElement.setPointerCapture(e.pointerId);if(gzS.v0==null)gzS=null},true);
 R.domElement.addEventListener('pointermove',e=>{if(!gzS)return;rc.setFromCamera(ndc(e),cam);
  if(gzS.h=='s'){const s=gzS;let d=axisParam(rc.ray,s.E,s.u)-s.v0;if(snapOn)d=Math.round(d/stepT)*stepT;const L=s.end?s.L0+d:s.L0-d;if(L<20)return;s.d=d;const o=s.o;o.p.L=L;if(!s.end)o.pos=add(s.pos0,mul(s.u,d));o.g=build(o);o._gk=null;mk(o);o.m.position.set(...o.pos);ver++;req();rulerDraw(s.E,s.u,d,snapOn?stepT:10,'Longueur '+sm(L));setHint('Longueur : '+sm(L));return}
  const{ev,c,init}=gzS;let M;
  if(gzS.h=='t'){let d=axisParam(rc.ray,c,ev)-gzS.v0;if(snapOn)d=Math.round(d/stepT)*stepT;rulerDraw(c,ev,d,snapOn?stepT:10,sm(Math.abs(d))+(d<0?' (−)':''));M=new THREE.Matrix4().makeTranslation(...mul(ev,d));gzS.d=d;setHint(`Déplacement ${'XYZ'[gzS.i]} : ${r1(d*uk())} ${us()}`)}
  else{const a=planeAngle(rc.ray,c,ev);if(a==null)return;let d=a-gzS.v0;while(d>Math.PI)d-=2*Math.PI;while(d<-Math.PI)d+=2*Math.PI;if(snapOn)d=Math.round(d/D/stepR)*stepR*D;gzS.d=d;angDraw(c,ev,gzS.v0,d,stepR,r1(d/D)+'°');
   M=new THREE.Matrix4().makeTranslation(...c).multiply(new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(...ev),d)).multiply(new THREE.Matrix4().makeTranslation(...mul(c,-1)));setHint(`Rotation autour de ${'XYZ'[gzS.i]} : ${r1(d/D)}°`)}
- for(const[o,M0]of init)setMat(o,M.clone().multiply(M0));if(gzS.h=='t')gzC=add(c,mul(ev,gzS.d));ver++;req();gzFields()});
-addEventListener('pointerup',()=>{if(!gzS)return;const had=gzS.d;gzS=null;rulerOff();setHint();if(had)touch();gzCenter();ui()},true);
+ for(const[o,M0]of init)setMat(o,M.clone().multiply(M0));if(gzS.o1&&gzS.h!='t')setHint(`Rotation autour de ${'XYZ'[gzS.i]} : ${r1(gzS.d/D)}° · ${inclTxt(gzS.o1)}`);if(gzS.h=='t')gzC=add(c,mul(ev,gzS.d));ver++;req();gzFields()});
+addEventListener('pointerup',()=>{if(!gzS)return;const had=gzS.d,etire=gzS.h=='s'&&had?gzS.o:null;gzS=null;if(etire)regenJoints([etire]);rulerOff();setHint();if(had)touch();gzCenter();ui()},true);
+/* inclinaison d'une traverse, lue comme on la mesure sur le terrain : par rapport à la verticale (et au sol) */ function inclTxt(o){const a=axisOf(o),v=Math.round(Math.acos(Math.min(1,Math.abs(a.u[2])))/D);return v<=1?'verticale':v>=89?'à plat':`inclinée de ${v}° par rapport à la verticale (${90-v}° par rapport au sol)`}
 function gzFields(){const o=sel.length==1&&!selA?sel[0]:null;if(!o)return;[...o.pos,...o.rot].forEach((v,i)=>{const e=$((i<3?'#p':'#r')+i%3);if(e)e.value=r1(i<3?v*uk():v)})}
 function setHint(t){const h=$('#hint');h.textContent=t||HINTS();h.style.display=(t||HINTS())?'':'none'}
 const HINTS=()=>pickMode?pickMode.prompt+'  (Échap : annuler)':'';
@@ -311,7 +312,7 @@ function segClose(p1,q1,p2,q2){const d1=sub(q1,p1),d2=sub(q2,p2),r=sub(p1,p2),a=
  let s=dn>1e-9?cl((b*f-c*e)/dn):0,t=(b*s+f)/e;if(t<0){t=0;s=cl(-c/a)}else if(t>1){t=1;s=cl((b-c)/a)}return[add(p1,mul(d1,s)),add(p2,mul(d2,t))]}
 const TEN_NAMES={hache:'tenon classique (hachette)',scie:'tenon scié',plat:'tenon plat',aronde:'queue d’aronde'};
 const ARO={1:'classique',2:'à mi-bois (traversante)',3:'trapézoïdale dans l’axe du cylindre'};
-const DOF={tenon:'Bloque 4 degrés de liberté : reste la rotation autour du tenon et le glissement hors de la mortaise.',plat:'Bloque 5 degrés de liberté : reste le glissement hors de la mortaise.',aronde:'Bloque 5 degrés de liberté : reste le glissement latéral dans la rainure.',mibois:'Bloque 5 degrés de liberté : reste le décollement perpendiculaire aux pièces (ajoutez une cheville).',cheville:'Bloque la translation dans le plan perpendiculaire à la cheville ; reste la rotation autour d’elle.'};
+const DOF={tenon:'Bloque 4 degrés de liberté : reste la rotation autour du tenon et le glissement hors de la mortaise.',plat:'Bloque 5 degrés de liberté : reste le glissement hors de la mortaise.',aronde:'Bloque 5 degrés de liberté : reste le glissement latéral dans la rainure.',mibois:'Bloque 5 degrés de liberté : reste le décollement perpendiculaire aux pièces (ajoutez une cheville).',cheville:'Bloque 5 degrés de liberté : reste seulement la rotation autour de la cheville (serrée, elle empêche aussi l’arrachement).',lash:'Bloque 5 degrés de liberté par serrage : reste la rotation « en ciseaux » autour de l’axe commun ; ajoutez une diagonale (triangle) pour la bloquer.'};
 function tenonDefaults(T,R){const dT=crossMin(T),wR=crossMin(R);return{dT,wR,d:Math.max(8,Math.round(Math.min(dT*.55,wR/3))),W:Math.max(15,Math.round(dT*.7)),Lc:Math.max(10,Math.round(dT*.8)),thick:Math.max(8,Math.round(Math.min(dT*.6,wR/3+8))),depth:Math.max(8,Math.round(wR/3))}}
 let BATCH=null;
 function refresh(...L){if(BATCH){L.forEach(o=>BATCH.add(o));return}L.forEach(o=>{mk(o)});if(L.some(o=>sel.includes(o)))select(sel,selA);touch()}
@@ -410,6 +411,63 @@ function replaceJid(jid,planFn){const saved=[];objs.forEach(x=>x.ops.forEach((p,
  saved.slice().reverse().forEach(s=>s.o.ops.splice(s.idx,1));let removedPegs=false;
  try{const pl=planFn();pl.ops.forEach(e=>{const s=saved.find(q=>q.o===e.o);if(s)e.at=s.idx});if(pegs.length){rmObjs(pegs);removedPegs=true}applyPlan(pl,jid)}
  catch(err){saved.forEach(s=>s.o.ops.splice(s.idx,0,s.op));throw err}}
+
+/* ----- mobilité : moteur léger qui compte les degrés de liberté que laissent les assemblages -----
+   Chaque pièce de bois est un solide (6 degrés de liberté). Chaque liaison laisse un petit nombre de
+   mouvements relatifs entre ses deux pièces (son « torseur cinématique ») et bloque les autres :
+   tenon rond : rotation autour du tenon et glissement hors de la mortaise (4 bloqués) ; tenon plat :
+   glissement hors de la mortaise (5) ; queue d'aronde : glissement dans la rainure (5) ; mi-bois :
+   décollement selon la normale commune (5) ; cheville : rotation autour d'elle (5 : serrée, elle empêche
+   l'arrachement) ; brêlage : rotation « en ciseaux » autour de la normale commune (5, par serrage).
+   Le rang du système de toutes ces contraintes donne les mobilités restantes de chaque structure. */
+const LIBRE={tenon:['ra','ta'],plat:['ta'],aronde:['tn'],mibois:['tn'],mibois_cheville:[],cheville:['ra'],lash:['rn']};
+/* pour la stabilité de la structure, on ne garde que les mouvements qui la DÉFORMENT : retirer un tenon de sa mortaise, décoller un
+   mi-bois ou faire glisser une queue d'aronde, c'est démonter (le serrage et la pesanteur l'empêchent) ; une perche ronde qui tourne
+   sur elle-même ne change rien (ces rotations sont retirées du compte plus bas) */
+const LIBRE_STRUCT={tenon:['ra'],plat:[],aronde:[],mibois:[],mibois_cheville:[],cheville:['ra'],lash:['rn']};
+const chevillesDe=jid=>objs.filter(x=>x.peg&&x.lk&&x.lk.includes(jid));
+function liaisons(){const J=new Map();objs.forEach(o=>(o.ops||[]).forEach(p=>{if(!p.jid||p.free||!p.rec||J.has(p.jid))return;const r=p.rec;if(!['tenon','mibois','cheville'].includes(r.k))return;const k=r.k=='tenon'?(r.opt&&r.opt.style=='aronde'?'aronde':r.opt&&r.opt.style=='plat'?'plat':'tenon'):r.k=='mibois'&&chevillesDe(p.jid).length?'mibois_cheville':r.k;J.set(p.jid,{k,ids:r.ids,jid:p.jid})}));
+ objs.forEach(o=>{if(o.type=='lash'&&o.p&&o.p.ids&&o.p.jid)J.set(o.p.jid,{k:'lash',ids:o.p.ids,jid:o.p.jid})});
+ // chevilles posées à part (modèles de la bibliothèque) : la cheville relie les pièces qu'elle traverse
+ objs.forEach(g=>{if(g.type!='trav'||!/^cheville/i.test(g.name||'')||(g.peg&&g.lk&&g.lk.length))return;const a=axisOf(g),pts=[.2,.35,.5,.65,.8].map(t=>add(a.p0,mul(sub(a.p1,a.p0),t)));
+  const tr=objs.filter(o=>o!==g&&isWood(o)&&!/^cheville/i.test(o.name||'')&&(()=>{const b=lbb(o);return pts.some(q0=>{const q=w2l(o,q0);return q.every((v,i)=>v>=b.min[i]-1&&v<=b.max[i]+1)})})());
+  tr.slice(1).forEach((o,i)=>J.set('peg'+g.id+'_'+i,{k:'cheville',ids:[tr[0].id,o.id],jid:null,peg:g}))});
+ return[...J.values()]}
+function geomLiaison(L){const P=L.ids.map(P_).filter(o=>o&&isWood(o));if(P.length<2)return null;const a=axisOf(P[0]),b=axisOf(P[1]),Bg=1e5,[pa,pb]=segClose(add(a.p0,mul(a.u,-Bg)),add(a.p1,mul(a.u,Bg)),add(b.p0,mul(b.u,-Bg)),add(b.p1,mul(b.u,Bg)));
+ let n=cr(a.u,b.u);n=len(n)<1e-6?(()=>{const t=Math.abs(a.u[2])<.9?[0,0,1]:[1,0,0];return nrm(cr(a.u,t))})():nrm(n);let ax=a.u,c=mul(add(pa,pb),.5);
+ if(L.k=='cheville'){const pg=L.peg||objs.find(x=>x.peg&&x.lk&&x.lk.includes(L.jid));if(pg){const g=axisOf(pg);ax=g.u;c=mul(add(g.p0,g.p1),.5)}else ax=n}
+ return{P,ax,n,c:mul(c,.001)}}
+/* rang d'une matrice (lignes de longueur m), élimination de Gauss avec pivot partiel ; renvoie aussi la forme échelonnée */
+function rangMat(rows,m){const R=rows.map(r=>Float64Array.from(r));let rk=0;const piv=[];for(let col=0;col<m&&rk<R.length;col++){let b=rk,bv=Math.abs(R[rk][col]);for(let i=rk+1;i<R.length;i++){const v=Math.abs(R[i][col]);if(v>bv){bv=v;b=i}}if(bv<1e-9)continue;[R[rk],R[b]]=[R[b],R[rk]];const pr=R[rk],pv=pr[col];for(let j=col;j<m;j++)pr[j]/=pv;for(let i=0;i<R.length;i++){if(i==rk)continue;const f=R[i][col];if(Math.abs(f)<1e-15)continue;const ri=R[i];for(let j=col;j<m;j++)ri[j]-=f*pr[j]}piv.push(col);rk++}return{rk,R:R.slice(0,rk),piv}}
+function mobilite(){const L=liaisons().map(l=>({...l,g:geomLiaison(l)})).filter(l=>l.g);const corps=[...new Set(L.flatMap(l=>l.g.P))];if(!corps.length)return{structures:[]};
+ const idx=new Map(corps.map((o,i)=>[o,i]));const par=corps.map((_,i)=>i),f=i=>par[i]==i?i:(par[i]=f(par[i]));L.forEach(l=>{const a=f(idx.get(l.g.P[0]));l.g.P.slice(1).forEach(o=>{par[f(idx.get(o))]=a})});
+ const groupes=new Map();corps.forEach((o,i)=>{const r=f(i);if(!groupes.has(r))groupes.set(r,[]);groupes.get(r).push(o)});const out=[];
+ const deg=new Map();L.forEach(l=>l.g.P.forEach(o=>deg.set(o,(deg.get(o)||0)+1)));
+ for(const G0 of groupes.values()){const G=[...G0].sort((x,y)=>(deg.get(y)||0)-(deg.get(x)||0)),gi=new Map(G.map((o,i)=>[o,i])),m=6*G.length,rows=[];
+  // la première pièce sert de référence : on cherche les mouvements des autres par rapport à elle
+  for(let k=0;k<6;k++){const r=new Array(m).fill(0);r[k]=1;rows.push(r)}
+  L.filter(l=>gi.has(l.g.P[0])).forEach(l=>{const{ax,n,c}=l.g,lib=(LIBRE_STRUCT[l.k]||[]).map(t=>t=='ra'?[...ax,...cr(c,ax)]:t=='rn'?[...n,...cr(c,n)]:t=='ta'?[0,0,0,...ax]:[0,0,0,...n]);
+   // les contraintes : le complément orthogonal des mouvements permis
+   const B=[];lib.forEach(v=>{let w=[...v];B.forEach(b=>{const d=w.reduce((s,x,i)=>s+x*b[i],0);w=w.map((x,i)=>x-d*b[i])});const nn=Math.hypot(...w);if(nn>1e-9)B.push(w.map(x=>x/nn))});
+   const C=[];for(let e=0;e<6&&C.length<6-B.length;e++){let w=[0,0,0,0,0,0];w[e]=1;[...B,...C].forEach(b=>{const d=w.reduce((s,x,i)=>s+x*b[i],0);w=w.map((x,i)=>x-d*b[i])});const nn=Math.hypot(...w);if(nn>1e-6)C.push(w.map(x=>x/nn))}
+   const i0=gi.get(l.g.P[0]);l.g.P.slice(1).forEach(o=>{const j=gi.get(o);C.forEach(cw=>{const r=new Array(m).fill(0);for(let q=0;q<6;q++){r[6*i0+q]=cw[q];r[6*j+q]=-cw[q]}rows.push(r)})})});
+  const{rk,R,piv}=rangMat(rows,m);const base=[];
+  {const P=new Set(piv);for(let fc=0;fc<m;fc++){if(P.has(fc))continue;const v=new Float64Array(m);v[fc]=1;R.forEach((r,ri)=>{v[piv[ri]]=-r[fc]});base.push(v)}}
+  // rotations d'une perche ronde sur elle-même : sans effet, retirées des mouvements trouvés
+  const dot6=(a,b)=>{let t=0;for(let i=0;i<m;i++)t+=a[i]*b[i];return t},ortho=(v,B)=>{B.forEach(b=>{const d=dot6(v,b);for(let i=0;i<m;i++)v[i]-=d*b[i]})},unit=v=>{const n=Math.sqrt(dot6(v,v));if(n<1e-7)return null;for(let i=0;i<m;i++)v[i]/=n;return v};
+  const tours=[],pt=new Map();L.forEach(l=>{if(!pt.has(l.g.P[0]))pt.set(l.g.P[0],l.g.c)});G.forEach((o,i)=>{if(i==0||!['trav','cyl'].includes(o.type))return;const a=axisOf(o),c=pt.get(o)||mul(mul(add(a.p0,a.p1),.5),.001),w=[...a.u,...cr(c,a.u)],v=new Float64Array(m);for(let q=0;q<6;q++)v[6*i+q]=w[q];
+   if(rows.every(r=>{let t=0;for(let q=0;q<6;q++)t+=r[6*i+q]*w[q];return Math.abs(t)<1e-5})){ortho(v,tours);if(unit(v))tours.push(v)}});
+  const modes=[];base.forEach(b=>{const v=Float64Array.from(b);ortho(v,tours);ortho(v,modes);if(unit(v))modes.push(v)});
+  const libres=modes.length,mob=new Set();modes.forEach(v=>G.forEach((o,i)=>{if(i==0)return;let t=0;for(let q=0;q<6;q++)t+=Math.abs(v[6*i+q]);if(t>1e-4)mob.add(o)}));
+  out.push({pieces:G,libres,mobiles:[...mob]})}
+ return{structures:out}}
+function mobiliteTxt(res){if(!res.structures.length)return'Aucun assemblage : rien à vérifier.';return res.structures.map((s,i)=>{const nom=s.pieces.length+' pièces';if(!s.libres)return`Structure ${i+1} (${nom}) : rigide, aucune pièce ne bouge par rapport aux autres.`;const L=s.mobiles.slice(0,6).map(o=>'« '+o.name+' »').join(', ')+(s.mobiles.length>6?'…':'');return`Structure ${i+1} (${nom}) : ${s.libres} mobilité${s.libres>1?'s':''} restante${s.libres>1?'s':''}. Peuvent encore bouger : ${L}. Si ce n’est pas voulu (articulation, pédale…), ajoutez une cheville, une contrefiche (équerre) ou un brêlage en triangle.`}).join('\n')}
+function showDof(){const t0=performance.now(),r=mobilite(),t=mobiliteTxt(r);const mob=r.structures.flatMap(s=>s.mobiles);if(mob.length)select(mob);modal(`<h3>Stabilité des assemblages</h3>${t.split('\n').map(l=>`<p>${esc(l)}</p>`).join('')}<p class="mu" style="font-size:12px">Calcul des degrés de liberté de chaque liaison (${Math.round(performance.now()-t0)} ms). Les pièces qui peuvent encore bouger sont sélectionnées. Le contact avec le sol n'est pas compté.</p><div class="r"><button class="p" onclick="closeMd()">Compris</button></div>`)}
+/* ----- répercussion : une pièce modifiée (longueur, diamètre…) ou un assemblage modifié refait les assemblages qui suivent ----- */
+function regenJoints(list,apres){const ids=new Set(list.filter(Boolean).map(o=>o.id)),J=new Map();objs.forEach(o=>(o.ops||[]).forEach(p=>{if(!p.jid||!p.rec||J.has(p.jid)||(apres&&p.jid<=apres))return;if(['tenon','mibois','cheville'].includes(p.rec.k)&&p.rec.ids.some(i=>ids.has(i)))J.set(p.jid,p.rec)}));
+ const echecs=[];[...J.entries()].sort((a,b)=>a[0]-b[0]).forEach(([jid,r])=>{const P=r.ids.map(P_);if(P.some(x=>!x))return;const pegs=chevillesDe(jid);try{replaceJid(jid,()=>{if(r.k=='tenon')return planTenon(P[0],P[1],{...r.opt,keepRoles:true});if(r.k=='cheville')return planCheville(P,{...r.opt,peg:r.opt.peg?P_(r.opt.peg):null});
+  const pl=planMibois(P[0],P[1],r.opt);if(pegs.length){const pc=planCheville([P[0],P[1]],{d:pegs[0].p.d||20,axis:'auto',lap:true});pl.ops.push(...pc.ops);pl.add=pc.add;pl.warn=pl.warn.concat(pc.warn)}return pl})}catch(e){echecs.push(r.k+' ('+P.map(x=>x.name).join(' / ')+') : '+(e.message||e))}});
+ if(echecs.length)msg('À revoir après la modification : '+echecs.join(' ; '),9000);return J.size}
 /* ----- liaisons : un assemblage bloque des degrés de liberté, les pièces liées se déplacent ensemble ----- */
 const jidsOf=o=>[...(o.ops||[]).filter(p=>p.jid&&!p.free).map(p=>p.jid),...(o.lk||[])];
 function linkedOf(o){const J=new Set(jidsOf(o));if(!J.size)return[];return objs.filter(x=>x!==o&&jidsOf(x).some(j=>J.has(j)))}
@@ -589,7 +647,7 @@ function asmWin(kind,A,B,edit){
  const win=opWin({init,title,intro:'Le tenon est taillé au bout de la première pièce et entre dans la seconde. Vous pouvez changer le type et les pièces : l’aperçu se met à jour.',fields,ok:edit?'Enregistrer':'Créer',delay:250,
   onRebuild:V=>{if(V.inv){[V.a,V.b]=[V.b,V.a];V.inv=false;['inv','a','b'].forEach(k=>{const e=$('#f_'+k);if(e){if(k=='inv')e.checked=false;else e.value=V[k]}})}if(tenonKind(V.kind)||V.kind=='mibois'){const T=P_(V.a),R=P_(V.b);if(T&&R&&tenonKind(V.kind))Object.assign(V,dfl(V.kind,T,R))}},
   preview:V=>{const a=P_(V.a),b=P_(V.b),k=V.kind;if(!a||!b)throw new Error('Choisissez deux pièces.');
-   if(k=='lash'){const S=sh(V),L=lashPlan(S.a,S.b,V);return{items:[S.a,S.b].map(o=>({g:geo(o),pos:o.pos,rot:o.rot,color:o.color})).concat([{tg:lashGeo({p:L}),pos:[0,0,0],rot:[0,0,0],color:'#cfc8b8',noedge:true}]),view:bestView([S.a,S.b],L.center,350),warn:[...S.warn,...(L.note?[L.note]:[])]}}
+   if(k=='lash'){const S=sh(V),L=lashPlan(S.a,S.b,V);return{items:[S.a,S.b].map(o=>({g:geo(o),pos:o.pos,rot:o.rot,color:o.color})).concat([{tg:lashGeo({p:L}),pos:[0,0,0],rot:[0,0,0],color:'#cfc8b8',noedge:true}]),view:bestView([S.a,S.b],L.center,350),warn:[...S.warn,...(L.note?[L.note]:[])],dof:DOF.lash}}
    const S=sh(V),pl=plan(V,S),ps=[S.a,S.b,P_(V.c)].filter(Boolean);S.warn.forEach(w=>pl.warn.push(w));if(k=='cheville'&&V.mode=='existing')ps.push(P_(V.peg));
    const c=pl.center||pl.ops[0]&&w2lCenter(pl)||[0,0,0],items=prevItems(pl,[...new Set(ps)],edit&&edit.jid);let rad_=Math.max(260,2.6*Math.max(crossMin(a),crossMin(b)));
    if(V.expl&&pl.axis&&tenonKind(k)){const off=mul(pl.axis,-(pl.L+60));items[0]={...items[0],pos:add(items[0].pos,off)};rad_=Math.max(rad_,(pl.L+60)*1.1+120)}
@@ -597,7 +655,7 @@ function asmWin(kind,A,B,edit){
   schema:(V,pv)=>{const k=V.kind,T=P_(V.a),R=P_(V.b);const ctx={...V,dT:T?crossMin(T):60};if(k=='mibois')return schema('mibois',V);if(k=='cheville')return schema('cheville',{d:V.pd});if(k=='lash')return'';if(k.startsWith('aronde'))return schema('aronde',{...V,typ:+k.slice(6)});return schema('tenon',{...ctx,style:k=='platscie'?'plat':k})},
   apply:V=>{const a=P_(V.a),b=P_(V.b),k=V.kind;
    if(k=='lash'){const S=sh(V);lashPlan(S.a,S.b,V);if(S.dv){S.mv.forEach(o=>{o.pos=add(o.pos,S.dv);o.m.position.set(...o.pos)});gzCenter()}PREF.rope=V.rope;savePrefs();const o=mkLash(a,b,{turns:V.turns,rope:V.rope,ltype:V.ltype});select([o]);msg('Brêlage ajouté (cabestan au départ).');return}
-   const S=sh(V);plan(V,S);if(S.dv){S.mv.forEach(o=>{o.pos=add(o.pos,S.dv);o.m.position.set(...o.pos)});gzCenter()}const R_={a,b},pl=plan(V,R_);if(edit)replaceJid(edit.jid,()=>plan(V,R_));else{const jid=applyPlan(pl);if(pl.pegRec){}}
+   const S=sh(V);plan(V,S);if(S.dv){S.mv.forEach(o=>{o.pos=add(o.pos,S.dv);o.m.position.set(...o.pos)});gzCenter()}const R_={a,b},pl=plan(V,R_);if(edit){replaceJid(edit.jid,()=>plan(V,R_));regenJoints([a,b],edit.jid)}else{const jid=applyPlan(pl);if(pl.pegRec){}}
    select([a,b].filter(Boolean));msg((pl.title||'Assemblage')+(edit?' modifié.':' créé.')+(pl.warn.length?' ⚠ '+pl.warn.join(' '):''),6000);if(k=='mibois'&&V.chev=='tenon'&&!edit)setTimeout(()=>askPick('Mi-bois validé. Cliquez maintenant la pièce qui portera le tenon (elle traversera le mi-bois).',P=>{if(P===a||P===b)return msg('Choisissez une autre pièce.');asmWin('hache',P,a)}),80)}});
  return win}
 /* positionnement automatique : amène la pièce mobile pour que les axes se croisent et que le tenon traverse comme il faut */
@@ -617,7 +675,7 @@ function autoShift(V,a,b){const k=V.kind;
  if(k=='aronde3'){const wv=(()=>{let q_=sub(ra.u,mul(ax,dot(ra.u,ax)));return len(q_)>.2?nrm(q_):bas(ax)[0]})(),e2=nrm(cr(wv,ax)),rR=rad(R),t=V.d||crossMin(T)/3;dv=add(dv,mul(e2,(V.flip?1:-1)*((rR-t/2)+2)))}
  return{dv:add(dv,mul(ax,s)),mover:T,warn:[]}}
 const w2lCenter=pl=>{const e=pl.ops[0];return e?l2w(e.o,e.op.c||e.op.o||[0,0,0]):[0,0,0]};
-function mkLash(A,B,opt){const L=lashPlan(A,B,{turns:6,rope:PREF.rope||2,...opt});return addObj('lash',{turns:L.turns,rope:L.rope,ltype:L.ltype,paths:L.paths},null,'Brêlage '+A.name+' / '+B.name,'#cfc8b8',[0,0,0],[0,0,0],A.par)}
+function mkLash(A,B,opt){const L=lashPlan(A,B,{turns:6,rope:PREF.rope||2,...opt});const o=addObj('lash',{turns:L.turns,rope:L.rope,ltype:L.ltype,paths:L.paths,ids:[A.id,B.id]},null,'Brêlage '+A.name+' / '+B.name,'#cfc8b8',[0,0,0],[0,0,0],A.par);  /* le brêlage lie les deux pièces et la corde : ils se déplacent ensemble (ils ne tenaient rien) */  const jid=++JID;[A,B,o].forEach(x=>{x.lk=x.lk||[];if(!x.lk.includes(jid))x.lk.push(jid)});o.p.jid=jid;touch();return o}
 const mkTenon=(T,R,opt)=>{const pl=planTenon(T,R,opt);applyPlan(pl);return pl};
 const mkMibois=(A,B,opt)=>{const pl=planMibois(A,B,opt);applyPlan(pl);return pl};
 let PRE_LT=null;
@@ -896,7 +954,7 @@ const TABS={
  'Fichier':[['Projet',[['table','Accueil',"tabClick('Accueil')"],['new','Nouveau','newProj()'],['open','Ouvrir','openDlg()'],['html','Enregistrer','saveProj()'],['json','Fichier .json','saveJSON()']]],['Exporter',[['pdf','PDF du plan','exPDF()'],['pdf','PDF vue 3D','exPDF3()'],['png','PNG vue 3D','exPNG3()'],['png','PNG du plan','exPNGplan()'],['svg','SVG du plan','dlSVG()'],['bom','Matériel CSV','dlBom()'],['print','Imprimer le plan','printAll()']]],['Application',[['gear','Paramètres','settingsDlg()'],['expert',()=>expert?'Passer en mode simple':'Passer en mode expert','toggleExpert()','expert'],['help','Aide','help()']]]],
  'Édition':[['Historique',[['undo','Annuler','undo()'],['redo','Rétablir','redo()']]],['Sélection',[['dup','Dupliquer','dup()'],['dup','Dupliquer sans opérations','dup(false)'],['rep','Répétition…','repWin()'],['del','Supprimer','delSel()'],['ground','Poser au sol','toGround()'],['cur','Tout sélectionner','selAll()']]],['Assemblage (arborescence)',[['asm','Grouper','groupSel()'],['ungrp','Dégrouper','ungroup()'],['move','Sortir du groupe','outOfGroup()']]],['Liaisons des pièces assemblées',[['unl','Détacher (déplacer seule)','unlinkSel(true)'],['lnk','Rattacher','unlinkSel(false)']]],['Contrôle',[['coll','Collisions','dCollisions()'],['bom','Liste des opérations','dOps()']]],['Déplacement',[['snap','Aimant','toggleSnap()','snap'],['step',()=>`Pas dépl. ${stepT} mm`,'cycT()'],['stepr',()=>`Pas rot. ${stepR}°`,'cycR()']]]],
  'Créer':[['Pièces',[['perche','Traverse',"addT('Z')"],['table','Modèles de référence',"tabClick('Bibliothèque de modèles')"],['asm','Modèles partagés',"tabClick('Modèles partagés')"]]],['Renforts',[['equerre','Équerre','equerreWin()','','equerre']]],['Plateaux et parois',[['plateau','Plateau, claies, filet','plateauWin()','','plateau']]],['Décoratif',[['ph','PH (cordes)','phWin()']]]],
- 'Opérations':[['Façonner',[['split','Fendre en planches','fendreWin()'],['quart','Quart de bois','quartWin()'],['coupe','Couper','coupeWin()'],['pointe','Pointe','pointeWin()']]],['Assemblages',[['hache','Tenon','asmStart(\'hache\')','','tenon'],['milb','Mi-bois',"asmStart('mibois')"],['aronde','Queue d’aronde',"asmStart('aronde')",'','aronde'],['cheville','Chevilles',"asmStart('cheville')"],['lash','Brêlage (dernier recours)',"asmStart('lash')",'','lash']]],['*Booléens (expert)',[['union','Union',"bool('u')"],['sub','A − B',"bool('s')"],['inter','Intersection',"bool('i')"]]]],
+ 'Opérations':[['Façonner',[['split','Fendre en planches','fendreWin()'],['quart','Quart de bois','quartWin()'],['coupe','Couper','coupeWin()'],['pointe','Pointe','pointeWin()']]],['Assemblages',[['hache','Tenon','asmStart(\'hache\')','','tenon'],['milb','Mi-bois',"asmStart('mibois')"],['aronde','Queue d’aronde',"asmStart('aronde')",'','aronde'],['cheville','Chevilles',"asmStart('cheville')"],['lash','Brêlage (dernier recours)',"asmStart('lash')",'','lash']]],['Contrôle',[['dof','Stabilité','showDof()']]],['*Booléens (expert)',[['union','Union',"bool('u')"],['sub','A − B',"bool('s')"],['inter','Intersection',"bool('i')"]]]],
  'Bibliothèque de modèles':[['Modèles',[['lib','Actualiser','libRefresh()']]]],
  'Modèles partagés':[['Modèles',[['lib','Actualiser','libRefresh()']]]],
  'Accueil':[['Démarrer',[['new','Nouveau projet','newProj()'],['open','Ouvrir','openDlg()']]]],
@@ -1051,7 +1109,7 @@ function ui(){sideShow();if(document.body.classList.contains('nm'))nomTab();if(d
  else h+=`<label>Tours de corde<input type="number" min="2" max="20" value="${o.p.turns}" oninput="o_lash(+this.value)"></label><p class="mu">Corde estimée : ${fr(ropeLen(o)/1000)} m</p>`;
  h+=`<h4>Objet</h4><div class="r"><button onclick="dup()">Dupliquer</button><button onclick="toGround()">Poser au sol</button><button class="dg" onclick="delSel()">Supprimer</button></div>`+sumHTML();P.innerHTML=h;dlBuild()}
 function o_lash(n){const o=sel1();if(!o||!(n>=2&&n<=20))return;o.p.turns=n;mk(o);touch()}
-function setP(k,v){const o=sel1();if(!o)return;const p=o.p;if(!(v>(k=='ch'||k=='fi'?-1:0)))return;const old=p[k];p[k]=v;if(!okp(o)){p[k]=old;return}o.g=build(o);mk(o);gzCenter();dlBuild();touch()}
+function setP(k,v){const o=sel1();if(!o)return;const p=o.p;if(!(v>(k=='ch'||k=='fi'?-1:0)))return;const old=p[k];p[k]=v;if(!okp(o)){p[k]=old;return}o.g=build(o);mk(o);if(o.type=='trav')regenJoints([o]);gzCenter();dlBuild();touch()}
 function setPos(i,v){const o=sel1();if(!o)return;const d=(v||0)-o.pos[i];moveTargets().forEach(x=>{x.pos[i]+=d;x.m.position.set(...x.pos)});ver++;gzCenter();touch()}
 function setRot(i,v){const o=sel1();if(!o)return;o.rot[i]=v||0;o.m.rotation.set(...o.rot.map(d=>d*D));gzCenter();touch()}
 function sumHTML(){if(!objs.length)return'';const b=bomData();return`<div class="sum" id="sum"><b>${objs.length}</b> pièces · <b>${b.nops}</b> assemblages · bois rond <b>${fr(b.tl)}</b> m${b.rope?` · corde ≈ <b>${fr(b.rope)}</b> m`:''}<br><a href="#" onclick="showBom();return false">Voir la liste du matériel</a></div>`}
