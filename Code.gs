@@ -11,7 +11,9 @@ var COMMUNITY_ID = '1z741rZqj5pWHSftU9uxWpoQBRAY8FEaE';  // modèles partagés (
 var SESSION_JOURS = 60;
 var TAILLE_MAX = 45 * 1024 * 1024;
 var EXT_OK = /\.(html|xhtml|svg|pdf|json|jpg|png)$/i;
-var GSCOPE = 'openid email https://www.googleapis.com/auth/drive.file';
+var GSCOPE = 'openid email profile https://www.googleapis.com/auth/drive.file';
+/* adresses de retour acceptées en plus de celle du script (la page GitHub de CathIA) : à déclarer aussi dans le client OAuth */
+var RETOURS_OK = /^https:\/\/fsggb\.github\.io\/[\w\/.-]*$/;
 
 function doGet(e) {
   var p = (e && e.parameter) || {};
@@ -22,13 +24,13 @@ function doGet(e) {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 /* API JSON pour la version hébergée ailleurs (GitHub Pages) : l'application appelle ces fonctions par POST */
-var API_ = ['rateModel', 'deleteModel', 'appInfo', 'authRequest', 'authVerify', 'authMe', 'authLogout', 'googleStart', 'googleClaim', 'listLibrary', 'readLibraryItem', 'readByLink', 'getThumb', 'publishModel'];
+var API_ = ['rateModel', 'deleteModel', 'appInfo', 'authRequest', 'authVerify', 'authMe', 'authLogout', 'googleStart', 'googleClaim', 'googleExchange', 'listLibrary', 'readLibraryItem', 'readByLink', 'getThumb', 'publishModel'];
 function doPost(e) {
   var out;
   try {
     var q = JSON.parse(e.postData.contents), fn = String(q.fn);
     if (API_.indexOf(fn) < 0) throw new Error('Fonction inconnue.');
-    out = { result: ({ rateModel: rateModel, deleteModel: deleteModel, appInfo: appInfo, authRequest: authRequest, authVerify: authVerify, authMe: authMe, authLogout: authLogout, googleStart: googleStart, googleClaim: googleClaim, listLibrary: listLibrary, readLibraryItem: readLibraryItem, readByLink: readByLink, getThumb: getThumb, publishModel: publishModel })[fn].apply(null, q.args || []) };
+    out = { result: ({ rateModel: rateModel, deleteModel: deleteModel, appInfo: appInfo, authRequest: authRequest, authVerify: authVerify, authMe: authMe, authLogout: authLogout, googleStart: googleStart, googleClaim: googleClaim, googleExchange: googleExchange, listLibrary: listLibrary, readLibraryItem: readLibraryItem, readByLink: readByLink, getThumb: getThumb, publishModel: publishModel })[fn].apply(null, q.args || []) };
   } catch (err) { out = { error: String(err && err.message || err) }; }
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
 }
@@ -112,12 +114,15 @@ function authVerify(email, code) {
  * Fenêtre pop-up : Google renvoie ici (?code=&state=). Le serveur échange le code, vérifie l'e-mail, ouvre une session
  * et dépose le résultat en cache 2 minutes pour que l'application le récupère. Le jeton d'accès Drive de l'utilisateur
  * (1 h, scope drive.file : seulement les fichiers créés par CathIA) n'est jamais conservé ici : il sert au navigateur de l'utilisateur. */
-function googleStart(hint) {
+function googleStart(hint, retour) {
   var p = props_(), cid = p.getProperty('GOOGLE_CLIENT_ID');
   if (!cid || !p.getProperty('GOOGLE_CLIENT_SECRET')) throw new Error('Connexion Google non configurée.');
   var state = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
-  CacheService.getScriptCache().put('gn_' + state, '1', 600);
-  var q = { client_id: cid, redirect_uri: appUrl_(), response_type: 'code', scope: GSCOPE, state: state, access_type: 'online' };
+  // Retour sur la page de l'application (GitHub) plutôt que sur ce script : avec plusieurs comptes Google ouverts,
+  // Google renvoie vers « script.google.com/macros/u/3/… », qu'Apps Script n'ouvre pas (« Impossible d'ouvrir le fichier »).
+  var redir = (retour && RETOURS_OK.test(String(retour))) ? String(retour) : appUrl_();
+  CacheService.getScriptCache().put('gn_' + state, redir, 600);
+  var q = { client_id: cid, redirect_uri: redir, response_type: 'code', scope: GSCOPE, state: state, access_type: 'online' };
   if (!hint) q.prompt = 'select_account';
   if (hint && /^[^\s@]+@[^\s@]+$/.test(hint)) q.login_hint = hint;
   return { url: 'https://accounts.google.com/o/oauth2/v2/auth?' + Object.keys(q).map(function (k) { return k + '=' + encodeURIComponent(q[k]); }).join('&'), state: state };
@@ -130,21 +135,32 @@ function googleReturn_(p) {
     if (p.error) throw new Error(p.error === 'access_denied'
       ? 'Google a refusé l’accès (access_denied). Si l’application est en mode « Test », ajoutez ce compte aux utilisateurs de test dans la console Google Cloud.'
       : 'Google a renvoyé une erreur : ' + String(p.error).replace(/[^\w .:-]/g, '').slice(0, 80) + '.');
-    if (!cache.get('gn_' + p.state)) throw new Error('Demande expirée : recommencez.');
-    cache.remove('gn_' + p.state);
-    var pr = props_(), cid = pr.getProperty('GOOGLE_CLIENT_ID');
-    var r = UrlFetchApp.fetch('https://oauth2.googleapis.com/token', { method: 'post', muteHttpExceptions: true, payload: { code: p.code, client_id: cid, client_secret: pr.getProperty('GOOGLE_CLIENT_SECRET'), redirect_uri: appUrl_(), grant_type: 'authorization_code' } });
-    var t = JSON.parse(r.getContentText());
-    if (r.getResponseCode() !== 200 || !t.id_token || !t.access_token) throw new Error('Google a refusé la connexion (' + (t.error_description || t.error || r.getResponseCode()) + ').');
-    if (String(t.scope || '').indexOf('auth/drive.file') < 0) throw new Error('Il faut autoriser l’accès aux fichiers créés par CathIA pour enregistrer dans votre Drive.');
-    var seg = t.id_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'); while (seg.length % 4) seg += '=';
-    var c = JSON.parse(Utilities.newBlob(Utilities.base64Decode(seg)).getDataAsString());
-    if (c.aud !== cid || (c.iss !== 'https://accounts.google.com' && c.iss !== 'accounts.google.com') || !c.email || c.email_verified !== true) throw new Error('Identité Google non vérifiée.');
-    var mail = String(c.email).toLowerCase();
-    cache.put(k, JSON.stringify({ token: session_(mail), email: mail, at: t.access_token, exp: Date.now() + (+t.expires_in || 3600) * 1000 }), 300);
+    cache.put(k, JSON.stringify(echange_(p.code, p.state)), 300);
     ok = true;
   } catch (err) { msg = String(err.message || err); cache.put(k, JSON.stringify({ err: msg }), 300); }
   return googlePage_(ok, msg);
+}
+/* échange le code Google contre une session CathIA ; l'adresse de retour est celle mémorisée au départ */
+function echange_(code, state) {
+  var cache = CacheService.getScriptCache(), redir = cache.get('gn_' + state);
+  if (!redir) throw new Error('Demande expirée : recommencez.');
+  cache.remove('gn_' + state);
+  if (redir === '1') redir = appUrl_();
+  var pr = props_(), cid = pr.getProperty('GOOGLE_CLIENT_ID');
+  var r = UrlFetchApp.fetch('https://oauth2.googleapis.com/token', { method: 'post', muteHttpExceptions: true, payload: { code: code, client_id: cid, client_secret: pr.getProperty('GOOGLE_CLIENT_SECRET'), redirect_uri: redir, grant_type: 'authorization_code' } });
+  var t = JSON.parse(r.getContentText());
+  if (r.getResponseCode() !== 200 || !t.id_token || !t.access_token) throw new Error('Google a refusé la connexion (' + (t.error_description || t.error || r.getResponseCode()) + ').');
+  if (String(t.scope || '').indexOf('auth/drive.file') < 0) throw new Error('Il faut autoriser l’accès aux fichiers créés par CathIA pour enregistrer dans votre Drive.');
+  var seg = t.id_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'); while (seg.length % 4) seg += '=';
+  var c = JSON.parse(Utilities.newBlob(Utilities.base64Decode(seg)).getDataAsString());
+  if (c.aud !== cid || (c.iss !== 'https://accounts.google.com' && c.iss !== 'accounts.google.com') || !c.email || c.email_verified !== true) throw new Error('Identité Google non vérifiée.');
+  var mail = String(c.email).toLowerCase(), pic = /^https:\/\/[\w.-]+\.googleusercontent\.com\//.test(String(c.picture || '')) ? String(c.picture) : '';
+  return { token: session_(mail), email: mail, picture: pic, nom: String(c.given_name || '').slice(0, 40), at: t.access_token, exp: Date.now() + (+t.expires_in || 3600) * 1000 };
+}
+/* retour de Google sur la page GitHub de l'application : elle transmet le code ici */
+function googleExchange(code, state) {
+  if (!/^[\w\/.-]{10,512}$/.test(String(code || '')) || !/^[0-9a-f]{64}$/.test(String(state || ''))) throw new Error('Retour de Google invalide.');
+  return echange_(String(code), String(state));
 }
 function googlePage_(ok, msg) {
   var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:16px system-ui,sans-serif;text-align:center;padding:48px 20px;color:#222}</style></head><body><h2>' +
