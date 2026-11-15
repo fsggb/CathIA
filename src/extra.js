@@ -51,7 +51,7 @@ EXB.cuisine=function(P,a,q){const Lp=q.long,Wp=q.larg,H=q.h,Wc=q.lc||600,ht=q.ht
   if(mb){try{mkMibois(L,C0,{pc:50})}catch(er){console.error('mibois cadre',er)}try{TJ(post(x0,s),C0,{mort:'thru',d:td(post(x0,s))});drill(L,P(x0,s*yt,zt),[0,0,1],td(post(x0,s))+1,'Mortaise du tenon du pied')}catch(er){console.error('tenon cadre',er)}}
   else{TJ(L,post(x0,s));}
   try{mkMibois(L,post(x1,s),{pc:50})}catch(er){console.error('mibois poteau central',er)}
-  TJ(L,post(x2,s));TJ(C1,post(x1,s),{mort:'blind'});
+  TJ(L,post(x2,s));TJ(C1,post(x1,s),{mort:'thru'});
   const B=low[i];TJ(B,post(x0,s));try{mkMibois(B,post(x1,s),{pc:50})}catch(er){console.error('mibois bas',er)}TJ(B,post(x2,s))});
  if(!mb){TJ(C0,post(x0,-1));TJ(C0,post(x0,1))}
  /* plateau du plan de travail : claies/rondins fendus sur les traverses continues */
@@ -61,7 +61,7 @@ EXB.cuisine=function(P,a,q){const Lp=q.long,Wp=q.larg,H=q.h,Wc=q.lc||600,ht=q.ht
  if(ty=='claies')deckBuild(P,a,q,{...c2,zt,dt:50,dc,nm:'étagère au niveau du plan (claies droites)',rails:top});
  else mkNet(newAsm('Filet étagère au niveau du plan',a.id).id,'Filet de ficelle',P,yt,zt,x1+rp+8,x2-rp-8,50);
  /* étagère intermédiaire éventuelle (1,5 fois la hauteur du plan) : traverses propres, tenonnées */
- [1.5*H].filter(z=>z<ztop-250).forEach(z=>{z=Math.round(z);const rl=[-1,1].map(s=>{const b=bar('Traverse étagère haute',P(x1+5,s*yt,z),P(x2+rp+2,s*yt,z),50,a.id);TJ(b,post(x1,s),{mort:'blind'});TJ(b,post(x2,s));return b});
+ [1.5*H].filter(z=>z<ztop-250).forEach(z=>{z=Math.round(z);const rl=[-1,1].map(s=>{const b=bar('Traverse étagère haute',P(x1+5,s*yt,z),P(x2+rp+2,s*yt,z),50,a.id);TJ(b,post(x1,s),{mort:'thru'});TJ(b,post(x2,s));return b});
   if(ty=='claies')deckBuild(P,a,q,{...c2,zt:z,dt:50,dc,nm:'étagère haute (claies droites)',rails:rl});else mkNet(newAsm('Filet étagère haute',a.id).id,'Filet de ficelle',P,yt,z,x1+rp+8,x2-rp-8,50)});
  /* filet du bas : sous le plan de travail ET dans la colonne, sur les traverses basses continues, au plan médian des traverses */
  mkNet(newAsm('Filet du bas',a.id).id,'Filet de ficelle (bas)',P,yt,zb,x0+rp+8,x2-rp-8,40);

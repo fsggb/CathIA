@@ -1719,7 +1719,7 @@ const EXQ={
  vaisselier:[['ten','Tenons','scie','sel',[['hache','Tenons à la hachette'],['scie','Tenons sciés']]],['long','Longueur du plateau (mm)',900],['larg','Largeur du plateau (mm), à ajuster à la bassine',380],['h','Hauteur du dessus (mm)',750],['maille','Maille du filet (mm)',30]],
  feu:[['ten','Tenons','scie','sel',[['hache','Tenons à la hachette'],['scie','Tenons sciés']]],['asm','Assemblage du cadre','mixte','sel',[['mixte','Optimisé : mi-bois dans le cadre, tenons aux pieds'],['tenons','Tenons uniquement'],['mibois','Mi-bois dans le cadre (chevillé par les pieds)']]],['long','Longueur du plateau (mm)',1000],['larg','Largeur du plateau (mm)',800],['h','Hauteur du dessus (mm)',700],['ep','Épaisseur des planches (mm)',30],['lp','Largeur des planches (mm)',100]]};
 /* cadre supérieur : 2 lisses + 2 traverses de largeur. Mi-bois aux angles (chevillés par les pieds taillés en tenon) ou tenons dans les pieds */
-function topFrame(P,a,q,c){const {x0,x1,y,zt,dl,dc,rp,pl}=c,mb=q.asm!='tenons',tx=c.tallX,e=mb?30:2,L=[],C=[],cz=mb?zt:(c.crossZ??zt),blindE=-(rp+5),opt=mb?{mort:'blind'}:{};
+function topFrame(P,a,q,c){const {x0,x1,y,zt,dl,dc,rp,pl}=c,mb=q.asm!='tenons',tx=c.tallX,e=mb?30:2,L=[],C=[],cz=mb?zt:(c.crossZ??zt),blindE=-(rp+5),opt=mb?{mort:'thru'}:{};
  [-1,1].forEach(s=>{const ea=tx===x0?blindE:e,eb=tx===x1?blindE:e,b=bar(c.nameL||'Lisse haute',P(x0-rp-ea,s*y,zt),P(x1+rp+eb,s*y,zt),dl,a.id);L.push(b);if(!mb){TJ(b,pl[x0+','+s]);TJ(b,pl[x1+','+s])}else{if(tx===x0)TJ(b,pl[x0+','+s],opt);if(tx===x1)TJ(b,pl[x1+','+s],opt)}});
  [x0,x1].forEach(x=>{const tall=x===tx,ee=tall?blindE:e,zc=tall?zt-28:cz,b=bar('Traverse haute (largeur)',P(x,-y-rp-ee,zc),P(x,y+rp+ee,zc),dc,a.id);C.push(b);if(!mb||tall){TJ(b,pl[x+',-1'],tall?opt:{});TJ(b,pl[x+',1'],tall?opt:{})}});
  if(mb)[0,1].forEach(i=>[0,1].forEach(j=>{if((j?x1:x0)===tx)return;try{mkMibois(L[i],C[j],{pc:50})}catch(e){console.error('mibois',e)}const post=pl[(j?x1:x0)+','+(i?1:-1)],td=Math.min(30,Math.round(crossMin(post)/3));
@@ -1728,7 +1728,7 @@ function topFrame(P,a,q,c){const {x0,x1,y,zt,dl,dc,rp,pl}=c,mb=q.asm!='tenons',t
  L.C=C;return L}
 /* plateau de claies droites posées dans des quarts de bois sur deux traverses, entre quatre pieds */
 /* traverses porteuses entre deux paires de pieds ; au pied « haut » (tall) le tenon est borgne et court, pour laisser la place à l'autre côté */
-function railsBetween(P,a,c,name,z,d){const {x0,x1,yt,rp,pl}=c,s0=c.tall===x0?x0+5:x0-rp-2,s1=c.tall===x1?x1-5:x1+rp+2;return[-1,1].map(s=>{const b=bar(name,P(s0,s*yt,z),P(s1,s*yt,z),d,a.id);TJ(b,pl[x0+','+s],c.tall===x0?{mort:'blind'}:{});TJ(b,pl[x1+','+s],c.tall===x1?{mort:'blind'}:{});return b})}
+function railsBetween(P,a,c,name,z,d){const {x0,x1,yt,rp,pl}=c,s0=c.tall===x0?x0+5:x0-rp-2,s1=c.tall===x1?x1-5:x1+rp+2;return[-1,1].map(s=>{const b=bar(name,P(s0,s*yt,z),P(s1,s*yt,z),d,a.id);TJ(b,pl[x0+','+s],c.tall===x0?{mort:'thru'}:{});TJ(b,pl[x1+','+s],c.tall===x1?{mort:'thru'}:{});return b})}
 function deckBuild(P,a,q,c){const {x0,x1,yt,zt,dt,rp,pl,dc}=c,g=newAsm(c.nm?c.nm[0].toUpperCase()+c.nm.slice(1):'Plateau',a.id),ox=P(0,0,0)[0];
   const rails=c.rails||railsBetween(P,a,c,'Traverse '+(c.nm||'haute'),zt,dt),r0=rails[0].pos[0]-ox;
   const from=(x0+rp+2)-r0+2,zone=x1-x0-2*rp-8;rails.forEach((rl,i)=>applyPlan(planQuart(rl,{start:from,len:zone,pos:i?0:270,mode:'quart'})));
@@ -1753,7 +1753,7 @@ const EXB={
   bar(`${tn} (à 0,40 m du bas)`,at(-(yy+r+5),400),at(yy+r+5,400),td,a.id,tc);pe.forEach((p,i)=>drill(p,at((i?1:-1)*yy,400),[0,1,0],td+1,'Trou de '+tn.toLowerCase()+' Ø'+(td+1)));
   bar(`${tn} d’articulation (à 0,15 m du bas)`,at(-(yy+r+5),150),at(yy+r+5,150),td,a.id,tc);pe.forEach((p,i)=>drill(p,at((i?1:-1)*yy,150),[0,1,0],td+1,'Trou de l’articulation Ø'+(td+1)));
   /* PIEDS ×2 en A, tenonnés (borgne) dans les perches, juste sous la cheville du haut */
-  const sc=L-50,sp=sc-160;[-1,1].forEach((s,i)=>{const T=at(s*yy,sp),F=[T[0]-60,P(0,s*q.ecart/2,0)[1],0],v=nrm(sub(T,F)),pied=bar(i?'Pied droit':'Pied gauche',F,add(T,mul(v,r*.4)),40,a.id);TJ(pied,pe[i],{d:28,mort:'blind'})});
+  const sc=L-50,sp=sc-160;[-1,1].forEach((s,i)=>{const T=at(s*yy,sp),F=[T[0]-60,P(0,s*q.ecart/2,0)[1],0],v=nrm(sub(T,F)),pied=bar(i?'Pied droit':'Pied gauche',F,add(T,mul(v,r*.4)),40,a.id);TJ(pied,pe[i],{d:28,mort:'thru'})});
   /* cheville de liaison des perches, à 5 cm du bout */
   bar('Cheville de liaison des perches',at(-(yy+r+12),sc),at(yy+r+12,sc),30,a.id,'#8a5a2b');pe.forEach((p,i)=>drill(p,at((i?1:-1)*yy,sc),[0,1,0],31,'Trou de la cheville de liaison Ø31 (à 5 cm du bout)'));
   /* ÉLÉMENT À USINER : rondin couché dans la gorge des deux perches, dans leur prolongement ; il dépasse de 10 cm au bout pour pouvoir le travailler */
@@ -1777,7 +1777,7 @@ const EXB={
   if(!q.pv)mkObj('ph',{segs,d:8,kind:'corde'},null,'Cordes du palonnier','#cfc8b8',[0,0,0],[0,0,0],a.id)},
  banc(P,a,q){const dL=Math.min(q.dL,200),L=q.L,h=q.h,zc=q.fendu?h:h-dL/2;let seat=mkObj('trav',{d:dL,L},null,'Rondin du banc','#d2ab76',P(0,0,zc),[0,90,0],a.id);
   if(q.fendu){const parts=fendre(seat,{mode:'demi',start:0,gap:0});seat=parts.find(p=>(bounds([p])[0][2]+bounds([p])[1][2])/2<zc)||parts[1];parts.filter(p=>p!==seat).forEach(p=>rmObjs([p]));seat.name='Assise (demi-rondin)';seat.par=a.id}
-  const f=dL*.9+60;[L*.14,L*.86].forEach(x=>[-1,1].forEach(s=>{const C=P(x,0,zc),F=P(x,s*f,0),T=add(F,mul(sub(C,F),(q.fendu?zc-20:zc)/zc)),pd=bar(`Pied ${x<L/2?'gauche':'droit'} ${s<0?'avant':'arrière'}`,F,T,50,a.id);TJ(pd,seat,{d:28,mort:'blind'})}))},
+  const f=dL*.9+60;[L*.14,L*.86].forEach(x0=>[-1,1].forEach(s=>{const x=x0+s*30,C=P(x,0,zc),F=P(x,s*f,0),T=add(F,mul(sub(C,F),(q.fendu?zc-20:zc)/zc)),pd=bar(`Pied ${x<L/2?'gauche':'droit'} ${s<0?'avant':'arrière'}`,F,T,50,a.id);TJ(pd,seat,{d:28,mort:'thru'})}))},
  prepa(P,a,q){const Lp=q.long,Wp=q.larg,H=q.h,dc=q.dc,dt=50,dr=q.dr||70,ep=dr/2,zt=H-ep,x0=60,x1=Lp-60,yt=(Wp-dt)/2,rp=35,mb=q.asm!='tenons';
   if(Lp<800||Wp<400||H<400)throw new Error('Table trop petite.');if(dc<8||dc>20)throw new Error('Diamètre des claies : de 8 à 20 mm.');
   const pl={};[[x0,-1],[x0,1],[x1,-1],[x1,1]].forEach(([x,s])=>pl[x+','+s]=bar(`Pied ${x<Lp/2?'gauche':'droit'} ${s<0?'avant':'arrière'}`,P(x,s*yt,0),P(x,s*yt,(x==x1&&q.tall)?q.tall:(mb?zt+27:zt+70)),70,a.id));
@@ -1824,11 +1824,11 @@ const EXB={
   const xr0=pr-zr*ta,xa=z=>xr0+z*ta;if(xr0<pr*.55+60)throw new Error('Banc instable : augmentez la profondeur ou réduisez l’inclinaison du dossier.');
   const side=[-1,1].map(s=>{const nm=s<0?'gauche':'droit',fl=bar(`Pied avant ${nm}`,P(0,s*yy,0),P(0,s*yy,zr+25+2),dP,a.id),rp=bar(`Montant arrière ${nm} (pied et dossier)`,P(xr0,s*yy,0),P(xa(Ht),s*yy,Ht),dP,a.id);
    /* traverse d'assise : le tenon du pied avant la traverse ; son bout arrière est tenonné dans le montant */
-   const sr=bar(`Traverse d’assise ${nm}`,P(-45,s*yy,zr),P(xa(zr)+dP*.1,s*yy,zr),50,a.id);TJ(fl,sr,{d:24,mort:'thru'});TJ(sr,rp,{d:20,mort:'blind'});
-   const lr=bar(`Traverse basse ${nm}`,P(dP*.1-dP/2+dP*.4,s*yy,zl),P(xa(zl)-dP*.1,s*yy,zl),40,a.id);TJ(lr,fl,{d:18,mort:'blind'});TJ(lr,rp,{d:18,mort:'blind'});
+   const sr=bar(`Traverse d’assise ${nm}`,P(-45,s*yy,zr),P(xa(zr)+dP*.1,s*yy,zr),50,a.id);TJ(fl,sr,{d:24,mort:'thru'});TJ(sr,rp,{d:20,mort:'thru'});
+   const lr=bar(`Traverse basse ${nm}`,P(dP*.1-dP/2+dP*.4,s*yy,zl),P(xa(zl)-dP*.1,s*yy,zl),40,a.id);TJ(lr,fl,{d:18,mort:'thru'});TJ(lr,rp,{d:18,mort:'thru'});
    return{fl,rp,sr}});
   /* entretoises de largeur (plus haut que les traverses basses pour ne pas se croiser dans les pieds) */
-  [['avant',x=>0,'fl'],['arrière',xa,'rp']].forEach(([nm,fx,k])=>{const b=bar(`Entretoise ${nm}`,P(fx(zx),-yy+dP*.1,zx),P(fx(zx),yy-dP*.1,zx),40,a.id);TJ(b,side[0][k],{d:18,mort:'blind'});TJ(b,side[1][k],{d:18,mort:'blind'})});
+  [['avant',x=>0,'fl'],['arrière',xa,'rp']].forEach(([nm,fx,k])=>{const b=bar(`Entretoise ${nm}`,P(fx(zx),-yy+dP*.1,zx),P(fx(zx),yy-dP*.1,zx),40,a.id);TJ(b,side[0][k],{d:18,mort:'thru'});TJ(b,side[1][k],{d:18,mort:'thru'})});
   /* assise : deux demi-rondins, face plate en dessus, en mi-bois sur les traverses d'assise et chevillés */
   const xEnd=pr-dP/2-6,xs=[xEnd-3*rS-6,xEnd-rS];xs.forEach((x,i)=>{const h=halfLog(`Assise ${i+1} (rondin fendu)`,P(x,-L/2,hs),P(x,L/2,hs),dS,[0,0,1],a.id,'#d2ab76');side.forEach(sd=>{try{mkMibois(h,sd.sr,{pc:50});applyPlan(planCheville([h,sd.sr],{d:16,axis:'auto',lap:true}))}catch(e){console.error('assise',e)}})});
   /* dossier : demi-rondin devant les montants, face plate vers le dos, en mi-bois et chevillé */
@@ -1839,12 +1839,12 @@ const EXB={
   /* chaque côté : une diagonale qui part du sol à l'avant et monte vers l'arrière ; elle est à la fois pied avant et support du dossier */
   const Dg=[-1,1].map(s=>bar(`Diagonale ${s<0?'gauche':'droite'} (pied avant et dossier)`,P(0,s*yy,0),P(xD(Ht),s*yy,Ht),dD,a.id));
   /* assise : un rondin avec un tenon plat à chaque bout, dans les diagonales */
-  const seat=bar('Assise (rondin)',P(xs,-yy,zs),P(xs,yy,zs),dS,a.id,'#d2ab76'),tp={style:'plat',d:Math.round(dS/4),W:Math.round(Math.min(dS*.5,dD*.8)),mort:'blind'};TJ(seat,Dg[0],tp);TJ(seat,Dg[1],tp);
+  const seat=bar('Assise (rondin)',P(xs,-yy,zs),P(xs,yy,zs),dS,a.id,'#d2ab76'),tp={style:'plat',d:Math.round(dS/4),W:Math.round(Math.min(dS*.5,dD*.8)),mort:'thru'};TJ(seat,Dg[0],tp);TJ(seat,Dg[1],tp);
   /* jambes arrière : peu inclinées, leur tenon entre par-dessous dans le rondin d'assise */
-  const xr=xs+zs*tb,legs=[-1,1].map(s=>bar(`Jambe arrière ${s<0?'gauche':'droite'}`,P(xr,s*yl,0),P(xs,s*yl,zs),dD-10,a.id));legs.forEach(l=>TJ(l,seat,{d:24,mort:'blind'}));
+  const xr=xs+zs*tb,legs=[-1,1].map(s=>bar(`Jambe arrière ${s<0?'gauche':'droite'}`,P(xr,s*yl,0),P(xs,s*yl,zs),dD-10,a.id));legs.forEach(l=>TJ(l,seat,{d:24,mort:'thru'}));
   /* traverses basses de côté : ferment le triangle diagonale / jambe, l'angle ne peut plus s'ouvrir */
-  const zl=170,xl=z=>xr+(xs-xr)*z/zs;[-1,1].forEach((s,i)=>{const b=bar(`Traverse basse ${s<0?'gauche':'droite'}`,P(xD(zl)+dD*.1,s*yy,zl),P(xl(zl)-dD*.1,s*yl,zl),40,a.id);TJ(b,Dg[i],{d:18,mort:'blind'});TJ(b,legs[i],{d:18,mort:'blind'})});
-  const zr=Math.max(zl+40,zs-dS/2-40),st=bar('Entretoise arrière',P(xl(zr),-yl+12,zr),P(xl(zr),yl-12,zr),40,a.id);TJ(st,legs[0],{d:18,mort:'blind'});TJ(st,legs[1],{d:18,mort:'blind'});
+  const zl=170,xl=z=>xr+(xs-xr)*z/zs;[-1,1].forEach((s,i)=>{const b=bar(`Traverse basse ${s<0?'gauche':'droite'}`,P(xD(zl)+dD*.1,s*yy,zl),P(xl(zl)-dD*.1,s*yl,zl),40,a.id);TJ(b,Dg[i],{d:18,mort:'thru'});TJ(b,legs[i],{d:18,mort:'thru'})});
+  const zr=Math.max(zl+40,zs-dS/2-40),st=bar('Entretoise arrière',P(xl(zr),-yl+12,zr),P(xl(zr),yl-12,zr),40,a.id);TJ(st,legs[0],{d:18,mort:'thru'});TJ(st,legs[1],{d:18,mort:'thru'});
   /* dossier : demi-rondin devant les diagonales, face plate vers le dos, en mi-bois et chevillé */
   const zb=Math.min(Ht-q.dd/2-30,hs+(Ht-hs)*.6),off=(dD/2+q.dd/2)*.7,bk=halfLog('Dossier (rondin fendu)',P(xD(zb)-off,-(yy+dD),zb),P(xD(zb)-off,yy+dD,zb),q.dd,[-Math.cos(al),0,Math.sin(al)],a.id,WC[1]);
   Dg.forEach(dg=>{try{mkMibois(bk,dg,{pc:50});applyPlan(planCheville([bk,dg],{d:16,axis:'auto',lap:true}))}catch(e){console.error('dossier',e)}})},
