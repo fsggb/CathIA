@@ -83,9 +83,11 @@ function mtWin(s){const T=(MT_TOOLS.find(t=>t[0]==s.tool)||[])[1]||'Opération';
  const el=document.createElement('div');el.id='mtw';el.innerHTML=`<b>${esc(T)}</b>${rows.map(r=>`<div>${esc(r)}</div>`).join('')}<button class="p">${s.kind=='joint'?'Appliquer':'Créer'}</button>`;document.body.appendChild(el);return el}
 function mtStart(){const tops=Object.values(asms).filter(x=>!x.par);montage(selA!=null?selA:tops.length==1?tops[0].id:0)}
 
-/* ===== Assistant : le fournisseur d'IA choisi par l'utilisateur (Gemini, Claude, ChatGPT, Grok, Mistral), avec SA clé ;
-   la clé reste dans ce navigateur et les messages partent directement chez le fournisseur : rien ne transite par un serveur CathIA ===== */
+/* ===== Assistant : ChatGDB (l'assistant de ScoutHub) pour les personnes connectées, dans la limite de leurs crédits, sans clé ;
+   sinon, ou en secours, le fournisseur d'IA choisi par l'utilisateur (Gemini, Claude, ChatGPT, Grok, Mistral) avec SA clé,
+   qui reste dans ce navigateur (les messages partent alors directement chez le fournisseur) ===== */
 const AIP={
+ chatgdb:{nom:'ChatGDB (ScoutHub, sans clé)',court:'ChatGDB',url:'/ScoutHub/index.html?connexion=1&next=CathIA/',aide:'inclus pour les comptes ScoutHub, dans la limite de vos crédits',sansCle:true},
  gemini:{nom:'Gemini (Google)',court:'Gemini',url:'https://aistudio.google.com/apikey',aide:'gratuite, avec un compte Google'},
  claude:{nom:'Claude (Anthropic)',court:'Claude',url:'https://console.anthropic.com/settings/keys',aide:'payante à l’usage',model:'claude-opus-5-5'},
  openai:{nom:'ChatGPT (OpenAI)',court:'ChatGPT',url:'https://platform.openai.com/api-keys',aide:'payante à l’usage',base:'https://api.openai.com/v1',pref:[/^gpt-5(\.\d+)?$/,/^gpt-5/,/^gpt-4\.1$/,/^gpt-4o$/,/^gpt/]},
@@ -93,10 +95,13 @@ const AIP={
  mistral:{nom:'Mistral (Le Chat)',court:'Mistral',url:'https://console.mistral.ai/api-keys',aide:'offre gratuite limitée',base:'https://api.mistral.ai/v1',model:'mistral-large-latest'}};
 const GEM_MODELS=['gemini-flash-latest','gemini-2.5-flash'];
 /* réglages : {p: fournisseur, k: {fournisseur: clé}, m: {fournisseur: modèle}} ; l'ancienne clé Gemini seule est reprise */
-const IAC={lire(){let o=null;try{o=JSON.parse(localStorage.getItem('cathia.ia')||'null')}catch(e){}if(!o||typeof o!='object')o={p:'gemini',k:{},m:{}};o.k=o.k||{};o.m=o.m||{};if(!AIP[o.p])o.p='gemini';
+const IAC={lire(){let o=null;try{o=JSON.parse(localStorage.getItem('cathia.ia')||'null')}catch(e){}if(!o||typeof o!='object')o={p:'',k:{},m:{}};o.k=o.k||{};o.m=o.m||{};if(o.p&&!AIP[o.p])o.p='';
   try{const g=localStorage.getItem('cathia.gk');if(g&&!o.k.gemini)o.k.gemini=g}catch(e){}return o},
  ecrire(o){try{localStorage.setItem('cathia.ia',JSON.stringify(o));localStorage.removeItem('cathia.gk')}catch(e){}}};
-const GK={get:()=>{const o=IAC.lire();return o.k[o.p]||''}};
+/* fournisseur utilisé : celui choisi ; sans choix, ChatGDB si la personne est connectée à ScoutHub, sinon la première clé enregistrée */
+function iaConnecte(){try{return !!localStorage.getItem('scouthub.token')}catch(e){return false}}
+function iaActif(o){o=o||IAC.lire();if(o.p=='chatgdb')return iaConnecte()?'chatgdb':(Object.keys(o.k).find(k=>o.k[k])||'chatgdb');if(o.p&&o.k[o.p])return o.p;if(iaConnecte())return'chatgdb';return Object.keys(o.k).find(k=>o.k[k])||''}
+const GK={get:()=>{const o=IAC.lire(),p=iaActif(o);return p=='chatgdb'?(iaConnecte()?'scouthub':''):(o.k[p]||'')}};
 /* devine le fournisseur d'une clé collée (seulement pour présélectionner : aucune clé n'est refusée sur sa forme) */
 function iaDevine(k){k=k.trim();return /^sk-ant-/.test(k)?'claude':/^xai-/.test(k)?'grok':/^sk-/.test(k)?'openai':/^(AIza|AQ\.)/.test(k)?'gemini':null}
 function iaErr(code,text){const e=new Error(code);e.code=code;if(text)e.text=text;return e}
@@ -163,20 +168,69 @@ async function oaiChat(p,key,model,lead,turns,opt,tools,emit){
   messages.push({role:'assistant',content:msg_.content||null,tool_calls:calls});
   for(const c of calls){let a={};try{a=JSON.parse(c.function&&c.function.arguments||'{}')}catch(e){}messages.push({role:'tool',tool_call_id:c.id,content:await iaOutil(tools,c.function&&c.function.name,a)})}}}
 
-/* l'assistant de CathIA : même interface que l'ancien (messages, options), quel que soit le fournisseur */
-async function iaAssistant(messages,opt={}){const o=IAC.lire(),p=o.p,key=o.k[p]||'';if(!key)throw iaErr('nokey');
+/* ChatGDB : le serveur ScoutHub prépare les instructions et signe un jeton ; la réponse arrive au fil de l'eau par le relais
+   Cloudflare (la clé Claude n'est jamais dans le navigateur) ; les outils de ScoutHub (base de connaissances, mémoire,
+   bibliothèque…) passent par le serveur, ceux de CathIA restent ici. */
+async function shPost(action,data){const t=localStorage.getItem('scouthub.token');if(!t)throw iaErr('nokey');
+ const r=await fetch(CFG.api,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,token:t,...data})});
+ const j=await r.json().catch(()=>({ok:false,error:'Réponse invalide du serveur ScoutHub.'}));
+ if(!j.ok){if(/Session expirée/.test(j.error||''))throw iaErr('nokey');throw iaErr('http',j.error||'Serveur ScoutHub indisponible.')}return j}
+async function chatgdbChat(lead,turns,opt,tools,onLive){
+ const conf=await shPost('rapide',{modele:'claude-haiku-5-5',style:'concise',web:true});
+ const sys=[{type:'text',text:conf.systeme[0],cache_control:{type:'ephemeral'}},{type:'text',text:conf.systeme[1]+'\n\nTU ES ICI L’ASSISTANT DE CATHIA, l’application de conception 3D de froissartage de ScoutHub. Tu agis sur le projet ouvert avec les outils de CathIA ; les liens d’action et l’outil « application » ne servent pas ici. Consignes de CathIA :\n'+String(lead.content)}];
+ const locaux=tools.map(t=>({name:t.name,description:t.description||t.name,input_schema:iaSchema(t)}));
+ const noms=new Set(locaux.map(t=>t.name)),outils=locaux.concat((conf.outils||[]).filter(t=>t.name!='application'&&!noms.has(t.name)));
+ const messages=turns.map(m=>({role:m.role=='assistant'?'assistant':'user',content:String(m.content)}));
+ if(opt.images&&opt.images.length&&messages.length){const last=messages[messages.length-1],c=[];for(const b of opt.images)c.push({type:'image',source:{type:'base64',media_type:b.type||'image/jpeg',data:await b64of(b)}});c.push({type:'text',text:last.content});last.content=c}
+ let texte='',urls={};
+ for(let it=0;it<20;it++){
+  const corps={model:conf.modele,max_tokens:conf.jetons||4000,stream:true,system:sys,messages,tools:outils,output_config:{effort:'low'}};
+  const r=conf.relais?await fetch(conf.relais,{method:'POST',signal:opt.signal,headers:{'content-type':'application/json','x-scouthub-jeton':conf.jeton},body:JSON.stringify(corps)})
+   :await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal:opt.signal,headers:{...ANT_H(conf.cle),'anthropic-version':conf.version||'2023-06-01',...(conf.espace?{'anthropic-workspace-id':conf.espace}:{})},body:JSON.stringify(corps)});
+  if(!r.ok){const j=await r.json().catch(()=>({}));const t=String(j.error&&j.error.message||'');if(r.status==429)throw iaErr('quota',t);throw iaErr('http','ChatGDB : '+(t||'erreur '+r.status))}
+  // lecture du flux : le texte s'affiche au fur et à mesure
+  const rd=r.body.getReader(),dec=new TextDecoder();let buf='',msg_=null;const blocs=[],js={};
+  for(;;){const{value,done}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});let i;
+   while((i=buf.indexOf('\n\n'))>=0){const l=buf.slice(0,i).split('\n').find(x=>x.startsWith('data:'));buf=buf.slice(i+2);if(!l)continue;let d;try{d=JSON.parse(l.slice(5))}catch(e){continue}
+    if(d.type=='message_start')msg_=d.message;
+    else if(d.type=='content_block_start'){blocs[d.index]=d.content_block;if(/tool_use$/.test(d.content_block.type))js[d.index]=''}
+    else if(d.type=='content_block_delta'){const b=blocs[d.index],x=d.delta;if(x.type=='text_delta'){b.text=(b.text||'')+x.text;texte+=x.text;onLive(texte)}else if(x.type=='input_json_delta')js[d.index]+=x.partial_json;else if(x.type=='thinking_delta')b.thinking=(b.thinking||'')+x.thinking;else if(x.type=='signature_delta')b.signature=x.signature;else if(x.type=='citations_delta')(b.citations=b.citations||[]).push(x.citation)}
+    else if(d.type=='content_block_stop'&&d.index in js){try{blocs[d.index].input=js[d.index]?JSON.parse(js[d.index]):{}}catch(e){blocs[d.index].input={}}}
+    else if(d.type=='message_delta'&&msg_)msg_.stop_reason=d.delta.stop_reason;
+    else if(d.type=='error')throw iaErr('http','ChatGDB : '+(d.error&&d.error.message||'erreur'))}}
+  const content=blocs.filter(Boolean);content.forEach(b=>{if(b.type=='web_search_tool_result'&&Array.isArray(b.content))b.content.forEach(x=>{if(x.url)urls[x.url]=1})});
+  messages.push({role:'assistant',content});
+  if(msg_&&msg_.stop_reason=='pause_turn')continue;
+  const calls=content.filter(b=>b.type=='tool_use');if(!msg_||msg_.stop_reason!='tool_use'||!calls.length)break;
+  const res=[];
+  for(const c of calls){
+   if(noms.has(c.name))res.push({type:'tool_result',tool_use_id:c.id,content:await iaOutil(tools,c.name,c.input)});
+   else{let o2;try{o2=await shPost('outil',{nom:c.name,input:c.input||{},urls:Object.keys(urls)})}catch(e){o2={resultat:'Erreur : '+(e.text||e.message)}}res.push({type:'tool_result',tool_use_id:c.id,content:o2.resultat==null?'(aucun résultat)':o2.resultat})}}
+  messages.push({role:'user',content:res});if(texte&&!/\n$/.test(texte))texte+='\n\n'}
+ return texte.trim()}
+
+/* l'assistant de CathIA : même interface que l'ancien (messages, options), quel que soit le fournisseur ;
+   ChatGDB en premier pour les personnes connectées, puis, s'il est indisponible (crédits épuisés, réseau), la clé personnelle */
+async function iaAssistant(messages,opt={}){const o=IAC.lire();let p=iaActif(o);if(!p)throw iaErr('nokey');
  const tools=Array.isArray(opt.tools)?opt.tools:[],lead=messages[0],turns=messages.slice(1);let text='';
+ if(p=='chatgdb'){
+  try{const t=await chatgdbChat(lead,turns,opt,tools,live=>{opt.onText&&opt.onText({text:live})});return{text:t||'(pas de réponse)',truncated:false}}
+  catch(e){if(e.name=='AbortError'){const x=iaErr('cancelled');throw x}
+   const secours=Object.keys(o.k).find(k=>o.k[k]);if(!secours||e.code=='cancelled')throw e;
+   p=secours;opt.onText&&opt.onText({text:'*ChatGDB indisponible ('+(e.code=='quota'?'crédits épuisés':(e.text||e.message||'erreur'))+') : réponse par '+AIP[p].court+'.*'});text='*ChatGDB indisponible : réponse par '+AIP[p].court+'.*'}}
+ const key=o.k[p]||'';if(!key)throw iaErr('nokey');
  const emit=t=>{text+=(text?'\n\n':'')+t;opt.onText&&opt.onText({text})};
  try{if(p=='gemini')await geminiChat(key,lead,turns,opt,tools,emit);else if(p=='claude')await claudeChat(key,o.m.claude,lead,turns,opt,tools,emit);else await oaiChat(p,key,o.m[p],lead,turns,opt,tools,emit)}
  catch(e){if(e.name=='AbortError'){const x=iaErr('cancelled');x.text=text;throw x}if(e instanceof TypeError&&!e.code){throw iaErr('http','Le fournisseur '+AIP[p].court+' ne répond pas (réseau, ou appel depuis le navigateur bloqué).')}if(!e.text)e.text=text;throw e}
  return{text:text||'(pas de réponse)',truncated:false}}
 iaAssistant.limits=async()=>({tools:true,images:true});
 const geminiAI=iaAssistant;
-function iaNom(){const o=IAC.lire();return o.k[o.p]?AIP[o.p].court:''}
+function iaNom(){const p=iaActif();return p?AIP[p].court:''}
 
 function aiKeyDlg(){const o=IAC.lire();
- modal(`<h3>Assistant : fournisseur d’IA</h3><p class="mu">Choisissez l’IA qui anime l’assistant et collez <b>votre clé</b>. Elle reste dans ce navigateur ; vos messages partent directement chez le fournisseur, sans passer par un serveur CathIA.</p>
- <label>Fournisseur<select id="ia_p">${Object.entries(AIP).map(([k,v])=>`<option value="${k}"${k==o.p?' selected':''}>${esc(v.nom)}${o.k[k]?' ✓':''}</option>`).join('')}</select></label>
+ const act=iaActif(o)||'chatgdb';
+ modal(`<h3>Assistant : fournisseur d’IA</h3><p class="mu"><b>ChatGDB</b>, l’assistant de ScoutHub, est inclus pour les personnes connectées à ScoutHub, sans clé, dans la limite de leurs crédits. Vous pouvez aussi utiliser <b>votre propre clé</b> (Gemini, Claude…), qui sert alors de secours quand ChatGDB n’est pas disponible ; elle reste dans ce navigateur.</p>
+ <label>Fournisseur<select id="ia_p">${Object.entries(AIP).map(([k,v])=>`<option value="${k}"${k==act?' selected':''}>${esc(v.nom)}${o.k[k]||(k=='chatgdb'&&iaConnecte())?' ✓':''}</option>`).join('')}</select></label>
  <p class="mu" id="ia_aide" style="font-size:12px;margin:4px 0"></p>
  <label>Clé<input id="ia_k" type="password" autocomplete="off" spellcheck="false"></label>
  <label>Modèle <span class="mu" style="font-weight:400">(laisser vide : choisi automatiquement)</span><input id="ia_m" autocomplete="off" spellcheck="false"></label>
@@ -184,10 +238,13 @@ function aiKeyDlg(){const o=IAC.lire();
  <div class="r"><button class="p" id="ia_s">Vérifier et enregistrer</button><button id="ia_x">Effacer cette clé</button><button onclick="closeMd()">Fermer</button></div>`);
  const sel=$('#ia_p'),ki=$('#ia_k'),mi=$('#ia_m'),out=$('#ia_r');
  const montrer=()=>{const p=sel.value,P=AIP[p];ki.value=o.k[p]||'';mi.value=o.m[p]||'';mi.placeholder=P.model||'automatique';
-  $('#ia_aide').innerHTML=`Clé ${esc(P.aide)} : <a href="${P.url}" target="_blank" rel="noopener">créer une clé ${esc(P.court)}</a>, puis collez-la ci-dessous.`;out.textContent=''};
+  ki.closest('label').hidden=!!P.sansCle;mi.closest('label').hidden=!!P.sansCle;$('#ia_x').hidden=!!P.sansCle;$('#ia_s').textContent=P.sansCle?'Utiliser ChatGDB':'Vérifier et enregistrer';
+  $('#ia_aide').innerHTML=P.sansCle?(iaConnecte()?'Vous êtes connecté à ScoutHub : ChatGDB est prêt, '+esc(P.aide)+'.':'Connectez-vous à ScoutHub pour utiliser ChatGDB : <a href="'+P.url+'">se connecter</a>.'):`Clé ${esc(P.aide)} : <a href="${P.url}" target="_blank" rel="noopener">créer une clé ${esc(P.court)}</a>, puis collez-la ci-dessous.`;out.textContent=''};
  sel.onchange=montrer;montrer();
  ki.oninput=()=>{const d=iaDevine(ki.value);if(d&&d!=sel.value&&!o.k[sel.value]){const v=ki.value;sel.value=d;montrer();ki.value=v;out.textContent='Clé '+AIP[d].court+' reconnue.'}};
- $('#ia_s').onclick=async()=>{const p=sel.value,k=ki.value.trim(),m=mi.value.trim();if(!k){out.textContent='Collez d’abord la clé.';return}
+ $('#ia_s').onclick=async()=>{const p=sel.value,k=ki.value.trim(),m=mi.value.trim();
+  if(AIP[p].sansCle){if(!iaConnecte()){out.innerHTML='Connectez-vous d’abord à ScoutHub : <a href="'+AIP[p].url+'">se connecter</a>.';return}o.p='chatgdb';IAC.ecrire(o);closeMd();msg('Assistant : ChatGDB.');buildRibbon();return}
+  if(!k){out.textContent='Collez d’abord la clé.';return}
   out.textContent='Vérification auprès de '+AIP[p].court+'…';$('#ia_s').disabled=true;
   try{const mod=await iaVerifier(p,k,m);o.p=p;o.k[p]=k;if(mod)o.m[p]=mod;else delete o.m[p];IAC.ecrire(o);closeMd();msg('Assistant prêt avec '+AIP[p].court+(mod?' ('+mod+')':'')+'.');buildRibbon()}
   catch(e){if(e.code=='badkey'){out.innerHTML='<span style="color:var(--er)">'+esc(AIP[p].court+' refuse cette clé'+(e.text?' : '+e.text:'.'))+'</span>'}
