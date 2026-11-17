@@ -2082,7 +2082,8 @@ function afterLoad(){H=[];Hi=-1;commit();closeMd();if(viewTab=='Accueil'){viewTa
 const slug=t=>String(t).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\w-]+/g,'-').replace(/^-|-$/g,'').toLowerCase()||'projet';
 /* ----- enregistrement (navigateur, artifact Claude, Google Apps Script) ----- */
 /* version en ligne : soit dans Google Apps Script, soit sur un site statique (GitHub Pages) qui appelle l'API Apps Script */
-const CFG={api:'https://script.google.com/macros/s/AKfycbwsDESwtXlHJOU-sHXazFq6hwufGkglXVrggKR4xSUtpsutsUnfnBuKo1ufd2Y5hLTXkA/exec'},inGas=()=>!!(window.google&&google.script&&google.script.run),gasOK=()=>inGas()||(!!CFG.api&&/^https?:/.test(location.protocol));
+/* un seul serveur pour toutes les applications : celui de ScoutHub (module « cathia ») */
+const CFG={api:'https://script.google.com/macros/s/AKfycbylU60sGF5NmQpjlrF2CdMNFbkUhXvihwNoTMm67IH0wOk7QZZL_nIfMhWaQinR9j-oFQ/exec'},inGas=()=>!!(window.google&&google.script&&google.script.run),gasOK=()=>inGas()||(!!CFG.api&&/^https?:/.test(location.protocol));
 async function save(filename,data,mime){let d=null;try{d=window.claude&&await claude.use('downloads')}catch(e){}
  if(d){try{await d.save({filename,data});return true}catch(e){if(e.code=='declined')return false;msg('Échec de l’enregistrement : '+(e.message||e.code));return false}}
  const blob=data instanceof Blob?data:new Blob([data],{type:mime||'application/octet-stream'});
