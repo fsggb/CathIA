@@ -71,7 +71,22 @@ function session_(email) {
   } finally { lock.releaseLock(); }
   return tok;
 }
+/* Connexion unique ScoutHub : un jeton « sh:… » est celui de ScoutHub (même site que CathIA) ; il est vérifié auprès du
+   serveur ScoutHub (action « me »), et le résultat gardé 10 minutes. Propriété facultative SCOUTHUB_API pour changer d'adresse. */
+var SCOUTHUB_API = 'https://script.google.com/macros/s/AKfycbylU60sGF5NmQpjlrF2CdMNFbkUhXvihwNoTMm67IH0wOk7QZZL_nIfMhWaQinR9j-oFQ/exec';
+function scoutHub_(tok) {
+  if (!/^[0-9a-f]{40,160}$/.test(tok)) throw new Error('Session expirée : reconnectez-vous.');
+  var cache = CacheService.getScriptCache(), k = 'SH_' + sha_(tok), hit = cache.get(k);
+  if (hit) return hit;
+  var r = UrlFetchApp.fetch(props_().getProperty('SCOUTHUB_API') || SCOUTHUB_API, { method: 'post', contentType: 'text/plain;charset=utf-8', muteHttpExceptions: true, payload: JSON.stringify({ action: 'me', token: tok }) });
+  var j = {}; try { j = JSON.parse(r.getContentText()); } catch (e) { }
+  var mail = j && j.ok && j.user && String(j.user.email || '').toLowerCase();
+  if (!mail) throw new Error('Session expirée : reconnectez-vous.');
+  cache.put(k, mail, 600);
+  return mail;
+}
 function user_(tok) {
+  if (typeof tok === 'string' && tok.indexOf('sh:') === 0) return scoutHub_(tok.slice(3));
   var raw = tok && props_().getProperty('T_' + sha_(tok));
   if (!raw) throw new Error('Session expirée : reconnectez-vous.');
   var o = JSON.parse(raw);
@@ -79,7 +94,7 @@ function user_(tok) {
   return o.e;
 }
 function authMe(tok) { try { return user_(tok); } catch (e) { return null; } }
-function authLogout(tok) { if (tok) props_().deleteProperty('T_' + sha_(tok)); return true; }
+function authLogout(tok) { if (tok && String(tok).indexOf('sh:') !== 0) props_().deleteProperty('T_' + sha_(tok)); return true; }
 
 /* ------------------------------ connexion par e-mail (code à 6 chiffres) ------------------------------ */
 function authRequest(email) {
