@@ -183,11 +183,16 @@ async function chatgdbChat(lead,turns,opt,tools,onLive){
  const messages=turns.map(m=>({role:m.role=='assistant'?'assistant':'user',content:String(m.content)}));
  if(opt.images&&opt.images.length&&messages.length){const last=messages[messages.length-1],c=[];for(const b of opt.images)c.push({type:'image',source:{type:'base64',media_type:b.type||'image/jpeg',data:await b64of(b)}});c.push({type:'text',text:last.content});last.content=c}
  let texte='',urls={};
- for(let it=0;it<20;it++){
-  const corps={model:conf.modele,max_tokens:conf.jetons||4000,stream:true,system:sys,messages,tools:outils,output_config:{effort:'low'}};
+ let maxTok=64000,sansProg=0,aj=0;                       /* ni limite d'étapes ni de longueur : on s'arrête quand Claude a fini ou quand la personne arrête */
+ for(let it=0;;it++){
+  if(opt.signal&&opt.signal.aborted)throw iaErr('cancelled');
+  const avant=texte.length;
+  const corps={model:conf.modele,max_tokens:maxTok,stream:true,system:sys,messages,tools:outils,output_config:{effort:'low'}};
   const r=conf.relais?await fetch(conf.relais,{method:'POST',signal:opt.signal,headers:{'content-type':'application/json','x-scouthub-jeton':conf.jeton},body:JSON.stringify(corps)})
    :await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal:opt.signal,headers:{...ANT_H(conf.cle),'anthropic-version':conf.version||'2023-06-01',...(conf.espace?{'anthropic-workspace-id':conf.espace}:{})},body:JSON.stringify(corps)});
-  if(!r.ok){const j=await r.json().catch(()=>({}));const t=String(j.error&&j.error.message||'');if(r.status==429)throw iaErr('quota',t);throw iaErr('http','ChatGDB : '+(t||'erreur '+r.status))}
+  if(!r.ok){const j=await r.json().catch(()=>({}));const t=String(j.error&&j.error.message||'');if(r.status==429)throw iaErr('quota',t);
+   if(r.status==400&&/max_tokens/i.test(t)&&aj++<4){const n=(t.match(/\d[\d_]*/g)||[]).map(x=>+x.replace(/_/g,'')).filter(x=>x>1000&&x<maxTok);if(n.length){maxTok=Math.max(...n);it--;continue}}
+   throw iaErr('http','ChatGDB : '+(t||'erreur '+r.status))}
   // lecture du flux : le texte s'affiche au fur et à mesure
   const rd=r.body.getReader(),dec=new TextDecoder();let buf='',msg_=null;const blocs=[],js={};
   for(;;){const{value,done}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});let i;
@@ -201,6 +206,14 @@ async function chatgdbChat(lead,turns,opt,tools,onLive){
   const content=blocs.filter(Boolean);content.forEach(b=>{if(b.type=='web_search_tool_result'&&Array.isArray(b.content))b.content.forEach(x=>{if(x.url)urls[x.url]=1})});
   messages.push({role:'assistant',content});
   if(msg_&&msg_.stop_reason=='pause_turn')continue;
+  if(msg_&&msg_.stop_reason=='max_tokens'){      /* réponse coupée par la longueur : la suite est demandée automatiquement */
+   sansProg=texte.length>avant?0:sansProg+1;if(sansProg>=4)break;
+   const ids=new Set(content.filter(b=>/_tool_result$/.test(b.type)).map(b=>b.tool_use_id)),sain=content.filter(b=>b.type!='tool_use'&&!(b.type=='server_tool_use'&&!ids.has(b.id)));
+   while(sain.length&&/thinking/.test(sain[sain.length-1].type))sain.pop();
+   messages.pop();if(sain.length)messages.push({role:'assistant',content:sain});
+   const lm=messages[messages.length-1],suite={type:'text',text:'Continue exactement là où tu t’es arrêté, sans répéter ce qui est déjà écrit.'};
+   if(lm&&lm.role=='user')lm.content=(Array.isArray(lm.content)?lm.content:[{type:'text',text:String(lm.content)}]).concat([suite]);else messages.push({role:'user',content:[suite]});
+   continue}
   const calls=content.filter(b=>b.type=='tool_use');if(!msg_||msg_.stop_reason!='tool_use'||!calls.length)break;
   const res=[];
   for(const c of calls){
